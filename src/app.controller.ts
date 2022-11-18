@@ -1,17 +1,17 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { AppService } from './app.service';
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
-
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
-  }
-
-  @Get('tasa-actual')
+  
+  @Get('')
   getTasaActual(){
     return this.appService.getCurrentTasa()
   }
+
+  @Get(':fecha')
+  getTasaVieja(
+    @Param('fecha') fecha:string
+  ){ return this.appService.getOldTasa(fecha)}
 }

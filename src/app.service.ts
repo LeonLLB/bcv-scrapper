@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import Redis from 'ioredis';
 import puppeter from 'puppeteer';
 import { Tasa, Tasas } from './tasa.interface';
@@ -66,5 +66,13 @@ export class AppService {
     const result = await this.redis.get(fechaString)
     if(result) this.redis.del()
 
+  }
+
+  async getOldTasa(fecha:string): Promise<Tasas>{
+    const result = await this.redis.get(fecha)
+
+    if(!result) throw new NotFoundException('No existe esa tasa BCV, por lo general se borran al pasar 7 días')
+
+    return JSON.parse(result)
   }
 }
