@@ -1,59 +1,69 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import Redis from 'ioredis';
-import puppeter from 'puppeteer';
+import fetch from 'node-fetch'
+import {Axios} from 'axios'
+import request from 'request'
+import * as https from 'https'
+import * as cheerio from 'cheerio'
 import { Tasa, Tasas } from './tasa.interface';
 
 @Injectable()
 export class AppService {
 
   redis = new Redis(process.env.REDIS_URL)
+  aget = new https.Agent({
+    rejectUnauthorized:false
+  })
+  axios = new Axios({baseURL:'https://bcv.org.ve',httpsAgent:this.aget})
 
   getHello(): string {
     return 'Hello World!';
   }
 
   async getCurrentTasa(): Promise<Tasas> {
-    const browser = await puppeter.launch()
-    const page = await browser.newPage()
 
-    await page.goto('https://www.bcv.org.ve/')
+    // const res = await fetch('http://bcv.org.ve',{
 
-    const containerSelector = '.view-tipo-de-cambio-oficial-del-bcv .col-xs-6 > span, .view-tipo-de-cambio-oficial-del-bcv .col-xs-6 > strong , .view-tipo-de-cambio-oficial-del-bcv .date-display-single'
+    // })
+    // const data = await res.text()
+    // console.log(data)
 
-    await page.waitForSelector(containerSelector);
+    const {data} = await this.axios.get('')
 
-    const tasas = await page.evaluate(resultsSelector => {
-      let lastTasa = ''
+    const $ = cheerio.load(data)
 
-      const tasas = {
-        eur: 0.0,
-        cny: 0.0,
-        try: 0.0,
-        rub: 0.0,
-        usd: 0.0,
-        fecha: ''
+    const query = '.view-tipo-de-cambio-oficial-del-bcv .col-xs-6 > span, .view-tipo-de-cambio-oficial-del-bcv .col-xs-6 > strong , .view-tipo-de-cambio-oficial-del-bcv .date-display-single'
+
+    const amountOfResults = $(query).length
+
+    const tasa: Tasas = {
+      eur: 0.0,
+      cny: 0.0,
+      try: 0.0,
+      rub: 0.0,
+      usd: 0.0,
+      fecha: ''
+    }
+    let lastTasa = ''
+
+    $(query)
+    .map((i,element)=>{
+
+      if(amountOfResults-1 === i){
+        tasa.fecha = $(element).attr('content').split('T')[0]
+        return
+      }
+      if(i%2 === 0){
+        lastTasa = $(element).text().trim().toLocaleLowerCase()
+      } else {
+        tasa[lastTasa] = parseFloat($(element).text().replace(',','.'))
+        return
       }
 
-      const arrResult = [...document.querySelectorAll(resultsSelector)].map((data, i) => {
+    })
 
-        if (document.querySelectorAll(resultsSelector).length - 1 === i) {
-          tasas.fecha = data.getAttribute('content').trim().split('T')[0]
-          return tasas
-        }
-        if (i % 2 === 0) {
-          const tasa = data.innerHTML.trim().toLocaleLowerCase()
-          lastTasa = tasa
-        } else {
-          const tasa = parseFloat(data.innerHTML.trim().replace(',', '.'))
-          return tasas[lastTasa] = tasa
-        }
-      })
-
-      return tasas
-
-    }, containerSelector)
-    await this.saveDBResult(tasas)
-    return tasas
+    await this.saveDBResult(tasa)
+    return tasa
   }
 
   async saveDBResult(tasas:Tasas){
