@@ -1,6 +1,6 @@
 
 
-export interface Tasas{
+export interface Tasa{
     eur:number
     cny:number
     try:number
@@ -9,7 +9,3 @@ export interface Tasas{
     fecha:string
 }
 
-export interface Tasa{
-    moneda: string
-    tasa: number
-}

@@ -1,32 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import Redis from 'ioredis';
-import fetch from 'node-fetch'
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {Axios} from 'axios'
-import request from 'request'
 import * as https from 'https'
 import * as cheerio from 'cheerio'
-import { Tasa, Tasas } from './tasa.interface';
+import { Tasa } from './tasa.interface';
+import { TasaStoreService } from './tasa-store.service';
 
 @Injectable()
 export class AppService {
 
-  redis = new Redis(process.env.REDIS_URL)
-  aget = new https.Agent({
+  constructor(public tasaStore: TasaStoreService){}
+
+  agent = new https.Agent({
     rejectUnauthorized:false
   })
-  axios = new Axios({baseURL:'https://bcv.org.ve',httpsAgent:this.aget})
+  axios = new Axios({baseURL:'https://bcv.org.ve',httpsAgent:this.agent})
 
-  getHello(): string {
-    return 'Hello World!';
-  }
-
-  async getCurrentTasa(): Promise<Tasas> {
-
-    // const res = await fetch('http://bcv.org.ve',{
-
-    // })
-    // const data = await res.text()
-    // console.log(data)
+  async getCurrentTasa(): Promise<Tasa> {
 
     const {data} = await this.axios.get('')
 
@@ -36,7 +25,7 @@ export class AppService {
 
     const amountOfResults = $(query).length
 
-    const tasa: Tasas = {
+    const tasa: Tasa = {
       eur: 0.0,
       cny: 0.0,
       try: 0.0,
@@ -50,6 +39,8 @@ export class AppService {
     .map((i,element)=>{
 
       if(amountOfResults-1 === i){
+        //TODO: VERIFICAR QUE LOS TIEMPOS EN LAS FECHAS SON DISTINTOS
+        console.log($(element).attr('content'))
         tasa.fecha = $(element).attr('content').split('T')[0]
         return
       }
@@ -62,27 +53,40 @@ export class AppService {
 
     })
 
-    await this.saveDBResult(tasa)
+    await this.tasaStore.saveResult(tasa)
     return tasa
   }
 
-  async saveDBResult(tasas:Tasas){
-    this.redis.set(tasas.fecha,JSON.stringify(tasas))
-
-    const fechaActual = new Date(tasas.fecha)
-    const fechaVieja = new Date(fechaActual.getFullYear(),fechaActual.getMonth(),fechaActual.getDate()-7)
-    const fechaString = `${fechaVieja.getFullYear()}-${fechaVieja.getMonth()+1}-${fechaVieja.getDate()}`
-    
-    const result = await this.redis.get(fechaString)
-    if(result) this.redis.del()
-
+  private validateDate(fecha:string){
+    const date = new Date(fecha)
+    if(isNaN(date.getTime())) throw new BadRequestException(`La fecha ${fecha} no es valida`)
   }
 
-  async getOldTasa(fecha:string): Promise<Tasas>{
-    const result = await this.redis.get(fecha)
+  async getOldTasa(fecha:string): Promise<Tasa>{
 
-    if(!result) throw new NotFoundException('No existe esa tasa BCV, por lo general se borran al pasar 7 días')
+    //VALIDAR QUE FECHA SEA VALIDA
+    this.validateDate(fecha)
+    const result = await this.tasaStore.getSingleTasa(fecha)
 
-    return JSON.parse(result)
+    if(!result) throw new NotFoundException('No existe esa tasa BCV')
+
+    return result
+  }
+
+  async getDateRangeTasas(desdeFecha: string, hastaFecha: string): Promise<Tasa[]>{
+    //VALIDAR QUE LAS FECHAS SEAN VALIDAS
+    this.validateDate(desdeFecha)
+    this.validateDate(hastaFecha)
+    
+    //VALIDAR QUE EL RANGO DE FECHA SEA VALIDO
+
+    const rangoDeFechas = {
+      desde: new Date(desdeFecha),
+      hasta: new Date(hastaFecha)
+    }
+
+    if(rangoDeFechas.hasta.getTime() < rangoDeFechas.desde.getTime()) throw new BadRequestException(`El rango de fecha no es valido: ${desdeFecha} / ${hastaFecha}`)
+
+    return this.tasaStore.getRangeTasas(desdeFecha,hastaFecha)
   }
 }

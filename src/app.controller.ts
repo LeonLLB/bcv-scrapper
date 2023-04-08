@@ -11,7 +11,13 @@ export class AppController {
   }
 
   @Get(':fecha')
-  getTasaVieja(
+  getTasa(
     @Param('fecha') fecha:string
   ){ return this.appService.getOldTasa(fecha)}
+
+  @Get(':desde/:hasta')
+  getTasas(
+    @Param('desde') desde:string,
+    @Param('hasta') hasta:string,
+  ){ return this.appService.getDateRangeTasas(desde,hasta)}
 }
